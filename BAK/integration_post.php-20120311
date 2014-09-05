@@ -1,0 +1,349 @@
+<?php
+// Require config file from command line argument
+if (count($argv) > 1) {
+	require_once $argv[1];
+} else {
+	echo "usage: $argv[0] [config_script].php\n";
+	exit;
+}
+
+// Initialize CiviCRM
+require_once '/var/www/imba/sites/all/modules/civicrm/civicrm.config.php'; 
+require_once 'CRM/Core/Config.php'; 
+$config =& CRM_Core_Config::singleton();
+require_once "api/v2/Contact.php";
+
+// Check for pre-integration script completion
+$outfile = "pre-integrations_stats*.txt";
+$matches = glob($outfile);
+if (!count($matches)) {
+	echo "\nintegration-pre.php does not appear to have been run. Continue (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+} 
+
+// Process zips
+$pattern = array('/"ObjectID","NAME","ST_FIPS","CTY_FIPS","POSTAL"/','/.*,.*,.*,.*,"(.*)"/','/\r\n/');
+$replace = array('','$1,','');
+$zips = trim(preg_replace($pattern, $replace, trim(file_get_contents($zip_territory_file))),',');
+if ($debug) echo "$zips\n";
+
+// Insert chapter into custom data field options list
+$query  = "
+SELECT count(*) AS count 
+FROM imba_civicrm.civicrm_option_value
+WHERE label='". $chapter ."'
+OR value='". $chapter ."'
+";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+$results->fetch( );
+if (!$results->count) {
+	$query  = "
+	INSERT INTO imba_civicrm.civicrm_option_value (id, option_group_id, label, value, name, grouping, filter, is_default, weight, description, is_optgroup, is_reserved, is_active, component_id, domain_id, visibility_id) VALUES (NULL, '45', '". $chapter ."', '". $chapter ."', NULL, NULL, NULL, '0', '0', NULL, '0', '0', '1', NULL, NULL, NULL)
+	";
+	if ($debug) echo "$query\n";
+	$params = array( );
+	$results =& CRM_Core_DAO::executeQuery( $query, $params );
+	echo "$chapter inserted into custom data field options list\n";
+} else {
+	echo "$chapter found in custom data field options list\n";
+}
+$query  = "
+UPDATE imba_civicrm.civicrm_option_value
+SET weight=0
+WHERE option_group_id=45
+";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+
+// Find current region/chapters for reference
+if ($verbose) {
+	$query  = "
+	SELECT count(*) AS count, c.sort_name AS sort_name, r.chapter_80 AS chapter 
+	FROM civicrm_contact AS c 
+	LEFT OUTER JOIN civicrm_value_region_and_chapter_12 AS r ON c.id = r.entity_id 
+	WHERE c.id IN (
+		SELECT DISTINCT c.id 
+		FROM civicrm_contact AS c 
+		LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+		WHERE  (
+			a.postal_code IN (" . $zips . ") 
+			OR c.source='" . $source . "')
+	) 
+	GROUP BY r.chapter_80
+	";
+	if ($debug) echo "$query\n";
+	$params = array( );
+	$results =& CRM_Core_DAO::executeQuery( $query, $params );
+	echo "
+";
+	while ( $results->fetch( ) ) {
+		echo $results->count . " " . $results->chapter . " " . $results->sort_name . "\n";
+	}
+	echo "\nContinue (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+}
+
+
+// Backup table
+$table_name = "civicrm_value_region_and_chapter_12";
+$outfile = getcwd() . "/$table_name-$nickname-" .date('Ymd-U') . ".sql";
+$query  = "
+SELECT * INTO OUTFILE '$outfile' FROM $table_name
+";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+if (!is_file($outfile)) {
+	echo "Error reading $outfile";
+	exit;
+} 
+echo "\nBackup writen to: $outfile.\n";
+
+// Delete empty and NULL chapters
+echo "Continue and delete empty and NULL chapters (y/n)? ";
+if (trim(fgets(STDIN)) != 'y') exit;
+$query  = "
+DELETE FROM civicrm_value_region_and_chapter_12 
+WHERE entity_id IN (
+	SELECT DISTINCT c.id 
+	FROM civicrm_contact AS c 
+	LEFT JOIN civicrm_address AS a ON c.id=a.contact_id 
+	AND a.is_primary=1 
+	WHERE (
+		a.postal_code IN (" . $zips . ") 
+		OR c.source='" . $source . "')
+) 
+AND (
+	chapter_80 IN ('At Large','Unassigned','') 
+	OR chapter_80 IS NULL
+)
+";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+while ( $results->fetch( ) ) {
+	echo $results->count . " " . $results->chapter . " " . $results->sort_name . "\n";
+}
+
+// Find updated region/chapters for reference
+if ($verbose) {
+	$query  = "
+	SELECT count(*) AS count, c.sort_name AS sort_name, r.chapter_80 AS chapter 
+	FROM civicrm_contact AS c 
+	LEFT OUTER JOIN civicrm_value_region_and_chapter_12 AS r ON c.id = r.entity_id 
+	WHERE c.id IN (
+		SELECT DISTINCT c.id 
+		FROM civicrm_contact AS c 
+		LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+		WHERE  (
+			a.postal_code IN (" . $zips . ") 
+			OR c.source='" . $source . "')
+	) 
+	GROUP BY r.chapter_80
+	";
+	if ($debug) echo "$query\n";
+	$params = array( );
+	$results =& CRM_Core_DAO::executeQuery( $query, $params );
+	echo "
+";
+	while ( $results->fetch( ) ) {
+		echo $results->count . " " . $results->chapter . " " . $results->sort_name . "\n";
+	}
+	echo "\nContinue (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+}
+
+// Create and a region/chapter insert statement file for contacts
+$outfile = getcwd() . "/region-chapter_insert-$nickname-" .date('Ymd-U') . ".sql";
+$query  = "
+SELECT DISTINCT CONCAT('insert into civicrm_value_region_and_chapter_12 (entity_id,region_79,chapter_80) values (',c.id,',\'". $region. "\',CONCAT(char(01),\'". $chapter. "\',char(01))) ON DUPLICATE KEY UPDATE region_79=\'". $region . "\',chapter_80=CONCAT(SUBSTRING(chapter_80, 1, LENGTH(chapter_80)-1), CONCAT(char(01),\'". $chapter. "\',char(01)));') FROM civicrm_contact AS c LEFT OUTER JOIN civicrm_value_region_and_chapter_12 AS r ON c.id = r.entity_id WHERE (r.chapter_80 NOT LIKE '%". $chapter. "%' OR r.chapter_80 IS NULL) AND c.id IN (SELECT DISTINCT c.id FROM civicrm_contact AS c LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 WHERE (a.postal_code IN (". $zips. ") OR c.source='" . $source . "')) INTO OUTFILE '" . $outfile ."';
+";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+if (!is_file($outfile)) {
+	echo "Error reading $outfile";
+	exit;
+} 
+echo "\nRegion/chaper insert writen to: $outfile.\nWould you like to view the file (y/n)? ";
+if (trim(fgets(STDIN)) == 'y') {
+	system('/bin/cat -n ' . $outfile);
+}
+
+// Import region/chapter insert file
+echo "\nContinue and import update file (y/n)? ";
+if (trim(fgets(STDIN)) != 'y') exit;
+system('mysql -ujason -pl0ngr1d3 imba_civicrm < ' . $outfile);
+echo "\n$outfile imported.\n";
+
+// Find updated region/chapters for reference
+if ($verbose) {
+	$query  = "
+	SELECT count(*) AS count, c.sort_name AS sort_name, r.chapter_80 AS chapter 
+	FROM civicrm_contact AS c 
+	LEFT OUTER JOIN civicrm_value_region_and_chapter_12 AS r ON c.id = r.entity_id 
+	WHERE c.id IN (
+		SELECT DISTINCT c.id 
+		FROM civicrm_contact AS c 
+		LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+		WHERE  (
+			a.postal_code IN (" . $zips . ") 
+			OR c.source='" . $source . "')
+	) 
+	GROUP BY r.chapter_80
+	";
+	if ($debug) echo "$query\n";
+	$params = array( );
+	$results =& CRM_Core_DAO::executeQuery( $query, $params );
+	echo "
+";
+	while ( $results->fetch( ) ) {
+		echo $results->count . " " . $results->chapter . " " . $results->sort_name . "\n";
+	}
+	echo "\nContinue (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+}
+
+// Backup civicrm_membership table
+$table_name = "civicrm_membership";
+$outfile = getcwd() . "/$table_name-$nickname-" .date('Ymd-U') . ".sql";
+$query  = "
+SELECT * INTO OUTFILE '$outfile' FROM $table_name
+";
+
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+if (!is_file($outfile)) {
+	echo "\nError reading $outfile";
+	exit;
+} 
+echo "\nBackup writen to: $outfile.\n";
+
+// Cancel imported duplicate memberships
+$outfile = getcwd() . "/cancel_dup_membership_update-$nickname-" .date('Ymd-U') . ".sql";
+$query = "SELECT concat('UPDATE civicrm_membership m SET m.status_id=6, m.membership_type_id=12, m.is_override=1 WHERE id=',max(m.id),' AND m.source=\'". $source. "\';') FROM civicrm_membership m, civicrm_contact c WHERE c.id=m.contact_id AND m.membership_type_id IN (1,5) AND m.owner_membership_id IS NULL AND c.external_identifier LIKE '". $nickname. "-%' GROUP BY c.id HAVING count(*)>1 INTO OUTFILE '" . $outfile . "'";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+if (!is_file($outfile)) {
+	echo "\nError reading $outfile";
+	exit;
+} 
+echo "\nDuplicate membership update file writen to: $outfile.\nWould you like to view the file (y/n)? ";
+if (trim(fgets(STDIN)) == 'y') {
+	system('/bin/cat -n ' . $outfile);
+}
+
+// Import dup membershp update file
+if (filesize($outfile)) {
+	echo "\nContinue and import update file (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+	system('mysql -ujason -pl0ngr1d3 imba_civicrm < ' . $outfile);
+	echo "\n$outfile imported.";
+} else {
+	echo "\n$outfile empty, skipping";
+}
+
+// Update membership join/start/end dates
+$outfile = getcwd() . "/membership_dates_update-$nickname-" .date('Ymd-U') . ".sql";
+$query = "SELECT concat('UPDATE civicrm_membership SET join_date=\'',min(join_date),'\', start_date=\'',min(start_date),'\', end_date=\'',max(end_date),'\', status_id=1, is_override=0 WHERE id=',min(m.id),';') FROM civicrm_membership m, civicrm_contact c WHERE c.id=m.contact_id AND m.membership_type_id IN (1,5,12) AND m.owner_membership_id IS NULL AND c.external_identifier LIKE '". $nickname. "-%' GROUP BY c.id HAVING count(*)>1 INTO OUTFILE '" . $outfile . "'";
+if ($debug) echo "$query\n";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+if (!is_file($outfile)) {
+	echo "\nError reading $outfile";
+	exit;
+} 
+echo "\nMembership join/start/end dates update file writen to: $outfile.\nWould you like to view the file (y/n)? ";
+if (trim(fgets(STDIN)) == 'y') {
+	system('/bin/cat -n ' . $outfile);
+}
+
+// Import dup membershp update file
+if (filesize($outfile)) {
+	echo "\nContinue and import update file (y/n)? ";
+	if (trim(fgets(STDIN)) != 'y') exit;
+	system('mysql -ujason -pl0ngr1d3 imba_civicrm < ' . $outfile);
+	echo "\n$outfile imported.";
+} else {
+	echo "\n$outfile empty, skipping";
+}
+
+// Post-integration numbers
+$query  = "SELECT DISTINCT count(*) as count 
+FROM civicrm_contact AS c 
+LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+WHERE (a.postal_code IN (" . $zips . ") 
+OR c.source='" . $source . "')
+";
+if ($debug) echo "$query";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+while ( $results->fetch( ) ) {
+	$contact_count = $results->count;
+	$message .= "Post-integration contacts: $results->count\n";
+}
+
+$query  = "SELECT DISTINCT count(*) as count 
+FROM civicrm_contact AS c 
+LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+LEFT JOIN civicrm_membership AS m ON c.id=m.contact_id 
+WHERE (a.postal_code IN (" . $zips . ") 
+OR c.source='" . $source . "')
+AND m.status_id IN (1,2,3) 
+AND m.membership_type_id IN (1,5)
+";
+if ($debug) echo "$query";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+while ( $results->fetch( ) ) {
+	$member_count = $results->count;
+	$message .=  "Post-integration new/current/lapsed members: $results->count\n";
+}
+
+$query  = "SELECT DISTINCT count(*) as count 
+FROM civicrm_contact AS c 
+LEFT JOIN civicrm_address AS a ON c.id=a.contact_id AND a.is_primary=1 
+LEFT JOIN civicrm_membership AS m ON c.id=m.contact_id 
+WHERE (a.postal_code IN (" . $zips . ") 
+OR c.source='" . $source . "')
+AND m.status_id=4
+AND m.membership_type_id IN (1,5)
+";
+if ($debug) echo "$query";
+$params = array( );
+$results =& CRM_Core_DAO::executeQuery( $query, $params );
+while ( $results->fetch( ) ) {
+	$expired_count = $results->count;
+	$message .=  "Post-integration expired members: $results->count\n";
+}
+
+// Output results
+if ($email) mail($recipient, $subject . " (post)", $message);
+echo "$message
+
+Next steps:
+
+– Create contribution pages
+– Add \"$chapter\" to IMBA.com/join
+– Update civi_tracker module
+– Create ACL groups
+– Build ACL permissions
+– Add chapter membership to contact
+– Ensure contact name matches \"$chapter\"
+– Set integration completed date on contact
+– Set revenue sharing to \"yes\" on contact\n\n";
+
+// Write stats to file
+$outfile = getcwd() . "/post-integrations_stats-$nickname-" .date('Ymd-U') . ".txt";
+$fh = fopen($outfile, 'w') or die("\nCan't open file $outfile");
+fwrite($fh, $message);
+fclose($fh);
+
+echo "Archiving SQL files";
+system("/bin/gzip *.sql");
+?>

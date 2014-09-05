@@ -1,0 +1,49 @@
+<?php
+// includes
+require_once '/usr/local/bin/imba/includes/functions.inc.php';
+
+// Initialize database
+$host = 'localhost';
+$user = 'jason';
+$pass = 'l0ngr1d3';
+$db = 'imba_civicrm';
+
+$link = mysql_connect($host, $user, $pass) or die("Can not connect." . mysql_error());
+mysql_select_db($db) or die("Can not connect.");
+
+
+$now = time();
+$today = date('Y-m-d',  mktime(0, 0, 0, date('m',$now), date('d',$now), date('Y',$now)));
+$month_ago = date('Y-m-d',  mktime(0, 0, 0, date('m',$now) - 1, date('d',$now), date('Y',$now)));
+$path = '/home/jason/reports/';
+$filename = "premium_stock_report-" . $today . ".csv";
+$header_row = NULL;
+$mailto    = "wendy@imba.com,membership@imba.com";
+//$mailto    = "evan.chute@imba.com";
+$from_mail = "evan.chute@imba.com";
+$from_name = "Evan Chute";
+$message   = "premium stock report from " . $today . " to " . $month_ago;
+$message  .= $filename . " file attached\n";
+$replyto   = $from_mail;
+$subject   = "premium stock report from " . $today . " to " . $month_ago;
+$count = 0;
+
+// stock sql
+$query  = "
+SELECT 'quantity','name','sku','product_option','fulfilled' UNION
+SELECT count(*) as quantity, ifnull(name,''), ifnull(sku,''), ifnull(product_option,''), if(t.thankyou_date IS NULL,'No','Yes') as fulfilled 
+INTO OUTFILE '" . $path . $filename . "'
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'
+FROM civicrm_contribution_product cp
+LEFT JOIN civicrm_product p on cp.product_id=p.id
+LEFT JOIN civicrm_contribution t on cp.contribution_id=t.id
+WHERE date(receive_date)>'" . $month_ago . "'
+AND name IS NOT NULL 
+AND name NOT LIKE 'No Gift%' 
+GROUP BY name, sku, product_option, fulfilled";
+
+
+$result = mysql_query($query);
+
+// Mail file
+mail_attachment($filename, $path, $mailto, $from_mail, $from_name, $replyto, $subject, $message);

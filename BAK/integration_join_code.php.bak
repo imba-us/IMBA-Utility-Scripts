@@ -1,0 +1,42 @@
+<?php
+// Require config file from command line argument
+if (count($argv) > 1) {
+	require_once $argv[1];
+} else {
+	echo "usage: $argv[0] [config_script].php\n";
+	exit;
+}
+
+// Initialize CiviCRM
+require_once '/var/www/imba/sites/all/modules/civicrm/civicrm.config.php'; 
+require_once 'CRM/Core/Config.php'; 
+$config =& CRM_Core_Config::singleton();
+require_once "api/v2/Contact.php";
+
+
+
+// Account for chapters without nicknames
+if(!$nickname) $nickname = $name;
+
+$message = "// /join
+	'" . $nickname . "'\t=> array(
+					 'fam'    => xx, 
+					 'ind'    => xx, 
+					 'region' => '" . $region . "', 
+					 'name'   => '" . $chapter . "'),
+
+// links
+		<option class=\"xx\" value=\"<?=\$url['" . $nickname . "']['ind']?>\"><?=\$url['" . $nickname . "']['name']?></option>
+		<option class=\"xx\" value=\"<?=\$url['" . $nickname . "']['fam']?>\"><?=\$url['" . $nickname . "']['name']?></option>
+";
+
+// output
+echo $message;
+
+// Write stats to file
+$outfile = getcwd() . "/integration_join_code-$nickname-" .date('Ymd-U') . ".txt";
+$fh = fopen($outfile, 'w') or die("\nCan't open file $outfile");
+fwrite($fh, $message);
+fclose($fh);
+
+?>

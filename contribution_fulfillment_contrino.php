@@ -1,0 +1,262 @@
+<?php
+// Process arguement
+$segment = $argv[1];
+switch($segment) {
+		/*
+		"1";"Shared Revenue"
+		"2";"Membership"
+		"3";"Campaign Donation: Annual"
+		"4";"Event Registration"
+		"5";"Campaign Donation: Legal Advocacy"
+		"6";"Campaign Donation: Trailbuilding"
+		"8";"Campaign Donation: California"
+		"11";"Campaign Donation: SORBA Annual"
+		"14";"General Donation: 3rd Party Fundraiser"
+		"16";"General Donation: Employer Matching"
+		"17";"In-kind"
+		"18";"General Donation: Team IMBA"
+		"19";"General Donation"
+		"20";"Foundation Grant"
+		"21";"Foundation Grant: Annual"
+		"22";"Planned"
+		"23";"Corporate Sponsorship"
+		"24";"Corporate Sponsorship: California"
+		"25";"General Donation: Tribute"
+		"26";"Government Grant"
+		"27";"General Donation: National Bike Summit"
+		"28";"Membership: Individual"
+		"29";"Membership: NMBP"
+		"30";"Membership: Corporate"
+		"31";"Membership: Retailer"
+		"32";"Membership: Club"
+		"37";"Campaign Donation: Ontario Mountain Bike Leadership"
+		"42";"Product Sale"
+		"43";"Campaign Donation: Public Land Initiative"
+		"44";"General Donation: Club Related"
+		*/
+	case 'a':
+		$contribution_type_ids = "3";
+		//$mailto = "evan.chute@imba.com";
+		$mailto = "evan.chute@imba.com, rod.judd@imba.com, membership@imba.com";
+		break;
+	default:
+		echo "Please specify segment 'a'\n";
+		exit;
+	}
+
+// Initialize CiviCRM
+require_once '/var/www/imba/sites/all/modules/civicrm/civicrm.config.php'; 
+require_once 'CRM/Core/Config.php'; 
+$config =& CRM_Core_Config::singleton(); 
+require_once "api/v2/Contact.php";
+require_once "api/v2/Contribute.php";
+require_once "api/v2/Membership.php";
+require_once '/usr/local/bin/imba/includes/functions.inc.php';
+
+// Variable declarations
+$now = time();
+$today = date('Y-m-d',  mktime(0, 0, 0, date('m',$now), date('d',$now), date('Y',$now)));
+$path = '/var/local/imba/fulfillment/';
+$bin_path = '/usr/local/bin/imba/';
+$include_path = $bin_path . 'includes/';
+$filename = "contribution_fulfillment-" . $today . "-" . $segment . ".csv";
+$first_row = "Contribution fulfillment for Contrino segment " . $segment . " processed on " . $today;
+$header_row = NULL;
+//"\"First Name\",\"Last Name\",\"Organization Name\",\"Street Address\",\"Supplemental Address 1\",\"City\",\"State\",\"Postal Code\",\"Postal Code Suffix\",\"Country\",\"Contributuion Type\",\"Total Amount\",\"End Date\",\"Product Name\",\"Product Option\",\"Region\",\"Chapter\",\"Internal Contact ID\"";
+$from_mail = "evan.chute@imba.com";
+$from_name = "Evan Chute";
+$message   = $first_row;
+$replyto   = $from_mail;
+$subject   = $first_row;
+$count = 0;
+
+// Open write file
+$fh = fopen($path . $filename, 'w') or die("can't open file");
+fwrite($fh, "\"" . $first_row . "\"\n" . $header_row . "\n");
+
+// Get contributions to fulfill
+$query  = "SELECT c.id, c.contact_id, c.total_amount, c.contribution_page_id, p.product_id
+FROM civicrm_contribution AS c
+LEFT OUTER JOIN civicrm_contribution_product AS p ON c.id=p.contribution_id
+LEFT OUTER JOIN civicrm_address AS a ON c.contact_id=a.contact_id AND a.is_primary=1
+WHERE contribution_type_id IN (" . $contribution_type_ids . ")
+AND a.country_id!=1039
+AND c.contribution_status_id=1
+AND c.thankyou_date IS NULL
+AND c.total_amount BETWEEN 0 and 250
+AND date(c.receive_date)>='2010-01-01'
+ORDER BY p.product_id, c.total_amount";
+//LIMIT 0,100";
+//echo $query; exit;
+
+$params = array( );
+$contributions_to_fulfill =& CRM_Core_DAO::executeQuery( $query, $params );
+while ( $contributions_to_fulfill->fetch( ) ) {
+	// Unify product to fulfill or none
+	if ($contributions_to_fulfill->product_id == 0 || $contributions_to_fulfill->product_id == 27 || is_null($contributions_to_fulfill->product_id)) $contributions_to_fulfill->product_id = 0;
+	// no paper fulfillment for non-MD online contributions with no gift
+	if ($segment == 'a' && $contributions_to_fulfill->contribution_page_id > 0 && $contributions_to_fulfill->product_id == 0) {
+		echo "\n- skipping (1) $contributions_to_fulfill->id for $contributions_to_fulfill->contact_id with premium $contributions_to_fulfill->product_id amount $contributions_to_fulfill->total_amount from contribution page $contributions_to_fulfill->contribution_page_id\n";
+		continue;
+	}
+	echo "\n+ fulfilling (99) $contributions_to_fulfill->id for $contributions_to_fulfill->contact_id with $contributions_to_fulfill->product_id amount $contributions_to_fulfill->total_amount from $contributions_to_fulfill->contribution_page_id\n";
+	//echo ".";
+	
+	// Count records
+	$count++;
+	
+	// Sent empty arrays
+	$fulfillment_details = array();
+	$contact = array();
+	$contribution = array();
+	$organization_contact_names = array();
+	$read_letter = NULL;
+	$name_label = "Name";
+
+	// retrieve record
+	$contact_id = $contributions_to_fulfill->contact_id; 
+	$params = array(
+			'contact_id' => $contact_id,
+			'return.contact_id' => 1,
+			'return.contact_type' => 1,
+			'return.display_name' => 1,
+			'return.first_name' => 1,
+			'return.last_name' => 1,
+			'return.organization_name' => 1,
+			'return.email' => 1,
+			'return.custom_79' => 1,
+			'return.custom_80' => 1,
+			'return.street_address' => 1,
+			'return.supplemental_address_1' => 1,
+			'return.city' => 1,
+			'return.state_province' => 1,
+			'return.postal_code' => 1,
+			'return.postal_code_suffix' => 1,
+			'return.country' => 1,
+			);
+	$contacts = ContactGet( $params );
+	$contact  = $contacts[$contact_id];
+
+	// Get individual address for blank organization address
+	if (!$contact['street_address']) {
+		$query  = "SELECT street_address, supplemental_address_1, city, abbreviation, postal_code, postal_code_suffix, 'UNITED STATES' as country
+FROM civicrm_contact c, civicrm_address a, civicrm_state_province s 
+WHERE c.id=a.contact_id 
+AND a.state_province_id=s.id
+AND a.is_primary=1
+AND c.employer_id='". $contact_id . "'";
+
+		$params = array( );		
+		$address_select_result =& CRM_Core_DAO::executeQuery( $query, $params );
+		while ( $address_select_result->fetch( ) ) {
+			$contact['street_address'] = $address_select_result->street_address;
+			$contact['supplemental_address_1'] = $address_select_result->supplemental_address_1;
+			$contact['city'] = $address_select_result->city;
+			$contact['state_province'] = $address_select_result->state_province;
+			$contact['postal_code'] = $address_select_result->postal_code;
+			$contact['postal_code_suffix'] = $address_select_result->postal_code_suffix;
+			$contact['country'] = $address_select_result->country;
+		}
+	}
+
+	// organization name and primary contact name
+	if ($contact['contact_type'] == "Organization") {
+		$name_label = "Organization";
+		$organization_contact_names = organization_contact_name($contact_id);
+		if ($organization_contact_names['email']) $contact['email'] = $organization_contact_names['email'];
+		$contact['first_name'] = $organization_contact_names['first_name'];
+		$contact['last_name'] = $organization_contact_names['last_name'];
+	} 
+	
+	// retrieve record
+	$contribution_id = $contributions_to_fulfill->id;
+	$params = array(
+			'contribution_id' => $contribution_id,
+			);
+	$contribution = ContributionGet( $params );
+
+	$contribution_type_parts = explode(':',$contribution['contribution_type']);
+	if (count($contribution_type_parts) > 1) {
+		$contribution['contribution_type'] = trim($contribution_type_parts[1]);
+	}
+	$contribution['contribution_type'] .= " Fund";
+	
+	// Set details array
+	$fulfillment_details = array(
+		'first_name'			=> $contact['first_name'],
+		'last_name'				=> $contact['last_name'],
+		'organization_name'		=> $contact['organization_name'],
+		'street_address'		=> $contact['street_address'],
+		'supplemental_address_1'=> $contact['supplemental_address_1'],
+		'city'					=> $contact['city'],
+		'state_province'		=> $contact['state_province'],
+		'postal_code'			=> $contact['postal_code'],
+		'postal_code_suffix'	=> $contact['postal_code_suffix'],
+		'country'				=> $contact['country'],
+		'contribution_type'		=> $contribution['contribution_type'],
+		'total_amount'			=> $contribution['total_amount'],
+		//'status'				=> $contribution['contribution_status_id'],
+		//'payment_instrument'	=> $contribution['payment_instrument'],
+		'source'				=> $contribution['contribution_source'],
+		'product_name'			=> $contribution['product_name'],
+		'product_option'		=> $contribution['product_option'],
+		//'thankyou_date'			=> print_date($contribution['thankyou_date']),
+		//'batch_code'			=> $contribution['custom_81'],
+		//'batch_date'			=> $contribution['custom_15'],
+		'receive_date'			=> $contribution['receive_date'],
+		'region'				=> $contribution['custom_76'],
+		'chapter'				=> $contribution['custom_77'],
+		'contact_id'			=> $contact_id,
+		'address_id'			=> $contact['address_id'],
+	);
+
+	//print_r($fulfillment_details);
+	//print_r($contact);
+	//print_r($contribution);
+	//print_r($membership);
+	//exit;
+	
+	// header row for csv
+	if (is_null($header_row)) {
+		foreach ( $fulfillment_details as $key => $value ) {
+			$header_row .= "\"" . $key . "\",";
+		}
+		$header_row .= "\n";
+		fwrite($fh, $header_row);
+	}
+	
+	// Write to file
+	$last = count($fulfillment_details);
+	$item = 0;
+	$line = NULL;
+	foreach ( $fulfillment_details as $key => $value ) {
+		$item++;
+		$line .= "\"" . $value . "\"";
+		if ($item == $last) {
+			$line .= "\n";
+		} else {
+			$line .= ",";
+		}
+	}
+	// Write to file
+	fwrite($fh, $line);	
+
+	// Build "IN" select 
+	if ($count > 1) $fulfilled_ids .= ", ";
+	$fulfilled_ids .= $contribution_id;
+	//if ($count >= $total_limit) break;
+	//break;
+}
+
+// Console output
+echo "\n". $first_row . " (" . $count . " records)\n";
+
+// Mail file
+mail_attachment($filename, $path, $mailto, $from_mail, $from_name, $replyto, $subject, $message);
+
+// Update thankyou_date
+$query = "update civicrm_contribution set thankyou_date=now() where id in (" . $fulfilled_ids . ")";
+$params = array( );		
+if ($count > 0) $contribution_update_result =& CRM_Core_DAO::executeQuery( $query, $params );
+echo $query . "\n";
+?>

@@ -1,0 +1,6 @@
+SELECT m1.id, m1.end_date, m2.id, m2.end_date, m2.contact_id, m2.source
+FROM civicrm_membership AS m1
+INNER JOIN civicrm_membership AS m2 ON m1.owner_membership_id = m2.id
+WHERE m1.owner_membership_id IS NOT NULL 
+AND m1.end_date!=m2.end_date
+ORDER BY m2.end_date ASC

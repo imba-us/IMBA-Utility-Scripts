@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# check for node author of 0
+/usr/bin/mysql -uimba -pfCxC4HGmTNxrfmR3 imba_drupal < ~jason/bin/check_node_author.sql
+
+# 
+echo -n "UPDATE civicrm_membership AS m1, civicrm_membership AS m2
+SET m1.end_date=m2.end_date,m1.status_id=9
+WHERE m1.owner_membership_id = m2.id
+AND m1.owner_membership_id IS NOT NULL 
+AND m1.end_date!=m2.end_date
+"
+# check for related memberships with wrong end_date
+/usr/bin/mysql -uimba -pfCxC4HGmTNxrfmR3 imba_civicrm < ~jason/bin/check_related_memberships.sql
+

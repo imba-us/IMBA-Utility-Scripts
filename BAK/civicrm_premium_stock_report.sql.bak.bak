@@ -1,0 +1,7 @@
+SELECT count(*) as quantity,name,sku,product_option,if(t.thankyou_date IS NULL,'No','Yes') as fulfilled FROM civicrm_contribution_product cp
+LEFT JOIN civicrm_product p on cp.product_id=p.id
+LEFT JOIN civicrm_contribution t on cp.contribution_id=t.id
+WHERE receive_date>(date(now()) - INTERVAL 1 MONTH)
+AND name IS NOT NULL 
+AND name NOT LIKE 'No Gift%' 
+GROUP BY name, sku, product_option, fulfilled

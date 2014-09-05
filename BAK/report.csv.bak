@@ -1,0 +1,39 @@
+quantity	name	sku	product_option	fulfilled
+235	Free the Trail Socks	10041-PREM	L/XL	No
+84	Free the Trail Socks	10041-PREM	S/M	No
+2	IMBA 2010 Calendar	10014	NULL	No
+10	IMBA Canada Cycling Socks	P0958	L	Yes
+16	IMBA Canada Cycling Socks	P0958	M	Yes
+8	IMBA Canada Cycling Socks	P0958	S	Yes
+2	IMBA Canada Cycling Socks	P0958	XL	Yes
+2	IMBA Canada T-Shirt	P0963	XL	Yes
+1	IMBA Jersey	10044	L	No
+2	IMBA Jersey	10044	L	Yes
+1	IMBA Jersey	10044	XL	Yes
+1	IMBA Jersey by Primal Wear	10025	S	Yes
+1	IMBA Member T-shirt	10032	L	No
+135	IMBA Member T-shirt	10032	L	Yes
+60	IMBA Member T-shirt	10032	M	Yes
+13	IMBA Member T-shirt	10032	S	Yes
+3	IMBA Member T-shirt	10032	XL	No
+94	IMBA Member T-shirt	10032	XL	Yes
+41	IMBA You Belong Socks by SockGuy	10030	Large/X Large	No
+195	IMBA You Belong Socks by SockGuy	10030	Large/X Large	Yes
+8	IMBA You Belong Socks by SockGuy	10030	Small/Medium	No
+89	IMBA You Belong Socks by SockGuy	10030	Small/Medium	Yes
+7	IMBA-SORBA Socks by SockGuy	10031	Large/X Large	No
+35	IMBA-SORBA Socks by SockGuy	10031	Large/X Large	Yes
+4	IMBA-SORBA Socks by SockGuy	10031	Small/Medium	No
+16	IMBA-SORBA Socks by SockGuy	10031	Small/Medium	Yes
+2	NMBP Ambassador Kit	NULL	Sock size - L/XL	Yes
+7	NMBP Basic Patroller Kit	NULL	Sock size - L/XL	No
+48	NMBP Basic Patroller Kit	NULL	Sock size - L/XL	Yes
+2	NMBP Basic Patroller Kit	NULL	Sock size - S/M	No
+28	NMBP Basic Patroller Kit	NULL	Sock size - S/M	Yes
+2	NMBP Basic Patroller Kit	NULL	Sock size - XXL	No
+6	NMBP Basic Patroller Kit	NULL	Sock size - XXL	Yes
+2	NMBP Supporting Patroller Kit	NULL	Sock size - L/XL	Yes
+1	NMBP Supporting Patroller Kit	NULL	Sock size - S/M	Yes
+1	NMBP Supporting Patroller Kit	NULL	Sock size - XXL	Yes
+1	NMBP Trailbuilding Patroller Kit	NULL	Sock size - L/XL	Yes
+1	NMBP Trailbuilding Patroller Kit	NULL	Sock size - XXL	Yes
